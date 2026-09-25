@@ -22,8 +22,26 @@
     submitBtn.textContent = loading ? "Preparando download..." : defaultLabel;
   }
 
-  async function triggerDownload(url) {
-    // Baixa via nosso servidor (sem redirect do Drive) — mais confiável no celular
+  function openExternalDownload(url) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.download = "guia-completo-vestidas-de-branco.pdf";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  async function triggerDownload(url, external) {
+    const isExternal = external || /^https?:\/\//i.test(url);
+
+    // Vercel / Drive: não dá para proxyar ~95MB na function — abre o download direto
+    if (isExternal) {
+      openExternalDownload(url);
+      return;
+    }
+
     try {
       const fileRes = await fetch(url, { credentials: "same-origin" });
       if (!fileRes.ok) throw new Error("Falha no download");
@@ -41,7 +59,6 @@
         URL.revokeObjectURL(objectUrl);
       }, 2000);
     } catch (_err) {
-      // Fallback: navegação direta com Content-Disposition do servidor
       window.location.href = url;
     }
   }
@@ -100,7 +117,7 @@
         throw new Error(data.error || "Não foi possível enviar seus dados.");
       }
 
-      await triggerDownload(data.downloadUrl || "/api/download");
+      await triggerDownload(data.downloadUrl || "/api/download", data.external);
       showMessage("Pronto! O download do guia deve começar agora.", "success");
       form.reset();
     } catch (err) {

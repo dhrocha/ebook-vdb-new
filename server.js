@@ -12,6 +12,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const LOCAL_PDF = path.join(__dirname, 'public', 'assets', 'guia.pdf');
 const PDF_FILENAME =
   process.env.PDF_FILENAME || 'guia-completo-vestidas-de-branco.pdf';
+const IS_VERCEL = Boolean(process.env.VERCEL);
 
 const SENDGRID_API_KEY = (process.env.SENDGRID_API_KEY || '').trim();
 if (SENDGRID_API_KEY) {
@@ -40,23 +41,53 @@ function extractDriveFileId() {
   return '';
 }
 
+function driveDirectDownloadUrl(fileId) {
+  // confirm=t evita a tela intermediária do Drive em arquivos grandes
+  return `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
+}
+
 function driveDownloadUrl(fileId) {
   return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
+function hasLocalPdf() {
+  try {
+    return fs.existsSync(LOCAL_PDF);
+  } catch {
+    return false;
+  }
+}
+
 async function resolvePdfSource() {
-  if (fs.existsSync(LOCAL_PDF)) {
+  // Na Vercel o PDF local (~95MB) não cabe no deploy serverless
+  if (!IS_VERCEL && hasLocalPdf()) {
     return { type: 'local', path: LOCAL_PDF };
+  }
+
+  if (process.env.PDF_PUBLIC_URL) {
+    return { type: 'public', url: process.env.PDF_PUBLIC_URL.trim() };
   }
 
   const fileId = extractDriveFileId();
   if (!fileId) {
     throw new Error(
-      'PDF não configurado. Defina GOOGLE_DRIVE_FILE_ID / GOOGLE_DRIVE_URL ou coloque o arquivo em public/assets/guia.pdf'
+      'PDF não configurado. Defina GOOGLE_DRIVE_FILE_ID / PDF_PUBLIC_URL ou coloque public/assets/guia.pdf (só fora da Vercel).'
     );
   }
 
-  return { type: 'drive', fileId, url: driveDownloadUrl(fileId) };
+  return {
+    type: 'drive',
+    fileId,
+    url: driveDirectDownloadUrl(fileId),
+    proxyUrl: driveDownloadUrl(fileId),
+  };
+}
+
+/** URL que o browser usa para baixar (sem passar 95MB pela function da Vercel). */
+function clientDownloadUrl(source) {
+  if (source.type === 'local') return '/api/download';
+  if (source.type === 'public') return source.url;
+  return source.url;
 }
 
 function sanitize(value, max = 200) {
@@ -135,11 +166,14 @@ app.post('/api/lead', submitLimiter, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Informe um WhatsApp válido.' });
     }
 
-    // Garante que o PDF está acessível antes de confirmar o lead
-    await resolvePdfSource();
+    const source = await resolvePdfSource();
     await sendLeadEmail({ name, email, whatsapp });
 
-    return res.json({ ok: true, downloadUrl: '/api/download' });
+    return res.json({
+      ok: true,
+      downloadUrl: clientDownloadUrl(source),
+      external: source.type !== 'local',
+    });
   } catch (err) {
     console.error('[lead]', err);
     if (err.response && err.response.body) {
@@ -156,6 +190,11 @@ app.get('/api/download', async (req, res) => {
   try {
     const source = await resolvePdfSource();
 
+    // Na Vercel / arquivo remoto: redireciona (function não aguenta ~95MB)
+    if (source.type !== 'local') {
+      return res.redirect(302, clientDownloadUrl(source));
+    }
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
@@ -163,38 +202,9 @@ app.get('/api/download', async (req, res) => {
     );
     res.setHeader('Cache-Control', 'no-store');
 
-    if (source.type === 'local') {
-      const stat = fs.statSync(source.path);
-      res.setHeader('Content-Length', stat.size);
-      return fs.createReadStream(source.path).pipe(res);
-    }
-
-    // Proxy do Drive: evita redirect no celular e força download
-    const response = await fetch(source.url, {
-      redirect: 'follow',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (compatible; VestidasDeBrancoEbook/1.0; +https://vestidasdebranco.com.br)',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Falha ao obter PDF do Drive (HTTP ${response.status})`);
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    // Drive às vezes devolve HTML de confirmação em arquivos grandes
-    if (contentType.includes('text/html')) {
-      throw new Error(
-        'O Google Drive pediu confirmação extra. Baixe o PDF e coloque em public/assets/guia.pdf para download direto.'
-      );
-    }
-
-    const length = response.headers.get('content-length');
-    if (length) res.setHeader('Content-Length', length);
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    return res.end(buffer);
+    const stat = fs.statSync(source.path);
+    res.setHeader('Content-Length', stat.size);
+    return fs.createReadStream(source.path).pipe(res);
   } catch (err) {
     console.error('[download]', err);
     return res.status(500).send('Não foi possível baixar o PDF. Tente novamente.');
@@ -208,18 +218,25 @@ app.get('/api/health', async (_req, res) => {
       ok: true,
       pdf: source.type,
       sendgrid: Boolean(SENDGRID_API_KEY),
+      vercel: IS_VERCEL,
     });
   } catch (err) {
     res.status(503).json({ ok: false, error: err.message });
   }
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Em local, Express serve o front. Na Vercel, a pasta public/ é estática.
+if (!IS_VERCEL) {
+  app.use(express.static(path.join(__dirname, 'public')));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+}
 
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Ebook landing em http://localhost:${PORT}`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`Ebook landing em http://localhost:${PORT}`);
-});
+module.exports = app;
