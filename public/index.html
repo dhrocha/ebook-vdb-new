@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Vestidas de Branco</title>
+  <meta name="description" content="Estamos noivos, por onde começar? Guia completo para um casamento inesquecível." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Paytone+One&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="hero__media">
+        <h1 class="hero__title hero__title--mobile">Estamos noivos,<br />por onde começar?</h1>
+        <img
+          class="hero__image"
+          src="/assets/mockup-ebook.png"
+          width="810"
+          height="810"
+          alt="Mockup do guia completo Vestidas de Branco"
+          fetchpriority="high"
+        />
+        <p class="hero__eyebrow hero__eyebrow--mobile"><strong>GUIA COMPLETO</strong></p>
+        <p class="hero__subtitle hero__subtitle--mobile">Faça as melhores escolhas para um casamento inesquecível!</p>
+      </div>
+
+      <div class="hero__content">
+        <h1 class="hero__title hero__title--desktop">Estamos noivos, por onde começar?</h1>
+        <p class="hero__lead hero__lead--desktop">
+          <span class="hero__eyebrow">GUIA COMPLETO</span>
+          Faça as melhores escolhas para um casamento inesquecível!
+        </p>
+
+        <div class="lead">
+          <p class="lead__hint">Clique abaixo e baixe gratuitamente.</p>
+
+          <form class="lead-form" id="lead-form" novalidate>
+            <label class="sr-only" for="name">Seu nome</label>
+            <input id="name" name="name" type="text" placeholder="Seu nome" required autocomplete="name" />
+
+            <label class="sr-only" for="email">Seu melhor Email</label>
+            <input id="email" name="email" type="email" placeholder="Seu melhor Email" required autocomplete="email" />
+
+            <label class="sr-only" for="whatsapp">Seu Whatsapp</label>
+            <input
+              id="whatsapp"
+              name="whatsapp"
+              type="tel"
+              inputmode="tel"
+              placeholder="Seu Whatsapp"
+              required
+              autocomplete="tel"
+            />
+
+            <button type="submit" class="lead-form__submit" id="submit-btn">
+              Baixar Guia Completo
+            </button>
+
+            <p class="lead-form__message" id="form-message" role="status" aria-live="polite" hidden></p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>2023 – todos os direitos reservados vestidas de branco</p>
+    </footer>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
